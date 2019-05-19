@@ -9,25 +9,6 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-type Article struct {
-	Title   string `json:"title"`
-	Desc    string `json:"description,omitempty"`
-	Content string `json:"content"`
-}
-
-type Articles []Article
-
-func allArticles(c *gin.Context) {
-	articles := Articles{
-		Article{"Albertito", "Se fue a la guerra", "que dolor, que pena"},
-		Article{Title: "Albertito", Content: "Se fue a la guerra"},
-	}
-	c.JSON(http.StatusOK, gin.H{
-		"data":    articles,
-		"message": nil,
-	})
-}
-
 func homePage(c *gin.Context) {
 	name := c.Query("name")
 	lastname := c.DefaultQuery("lastname", "anonymous")
@@ -49,7 +30,6 @@ func handlerFunctions() {
 	r.Use(gin.Recovery())
 
 	r.GET("/home", homePage)
-	r.GET("/articles", allArticles)
 	r.POST("/newUser", user.CreateUserHandler)
 	r.POST("/login", user.LoginHandler)
 	err := r.Run(":3000")

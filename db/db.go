@@ -32,6 +32,7 @@ func new() DBManager {
 
 	err = db.Ping()
 	if err != nil {
+		db.Close()
 		panic(err)
 	}
 	return DBManager{db, true}
