@@ -1,10 +1,11 @@
 package user
 
 import (
+	"crypto/rand"
+	"fmt"
 	"legislacion/db"
 	"log"
 	"net/http"
-	"time"
 
 	"github.com/gin-gonic/gin"
 	"golang.org/x/crypto/bcrypt"
@@ -23,14 +24,7 @@ type User struct {
 	PasswordHash string `db:"passwordhash" json:"-"`
 	PasswordSalt string `db:"-" json:"-"`
 	IsDisabled   bool   `db:"isdisabled" json:"-"`
-}
-
-// Session export interface
-type Session struct {
-	SessionKEY   string    `db:"sessionkey"`
-	UserID       int8      `db:"userid"`
-	LoginTime    time.Time `db:"logintime"`
-	LastSeenTime time.Time `db:"lastseentime"`
+	Token        string `db:"token" json:"token"`
 }
 
 // CreateUserHandler handles the user creation
@@ -60,9 +54,9 @@ func CreateUserHandler(c *gin.Context) {
 	err := createUser(&user)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, err)
-	} else {
-		c.JSON(http.StatusOK, user)
 	}
+
+	c.JSON(http.StatusOK, user)
 }
 
 // LoginHandler handle the users login
@@ -87,8 +81,9 @@ func LoginHandler(c *gin.Context) {
 	query := "SELECT * FROM users WHERE username = $1"
 	row := pq.Db.QueryRow(query, user.UserName)
 
-	err := row.Scan(&user.ID, &user.UserName, &user.FullName, &user.PasswordHash, &user.IsDisabled, &user.Email)
+	err := row.Scan(&user.ID, &user.UserName, &user.FullName, &user.PasswordHash, &user.IsDisabled, &user.Email, &user.Token)
 	if err != nil {
+		log.Print(err)
 		c.JSON(http.StatusInternalServerError, err)
 		return
 	}
@@ -99,8 +94,22 @@ func LoginHandler(c *gin.Context) {
 		c.JSON(http.StatusUnprocessableEntity, err)
 		return
 	}
+
+	if len(user.Token) == 0 {
+		updateToken(&user)
+	}
 	c.JSON(http.StatusOK, user)
 	return
+}
+
+func updateToken(user *User) {
+	user.Token = tokenGenerator()
+	query := `UPDATE users SET token = $1 WHERE id = $2;`
+	pq := db.GetDB()
+	_, err := pq.Db.Exec(query, user.Token, user.ID)
+	if err != nil {
+		log.Print("Error al cambiar token", err)
+	}
 }
 
 func createUser(user *User) (err error) {
@@ -109,9 +118,10 @@ func createUser(user *User) (err error) {
 		log.Fatal("ERROR HASHING:", err)
 		return err
 	}
+	user.Token = tokenGenerator()
 	pq := db.GetDB()
-	query := "INSERT INTO users (id, username, fullname, email, passwordhash, isdisabled) VALUES (nextval('users_seq'),$1, $2, $3, $4, false) RETURNING id;"
-	row := pq.Db.QueryRow(query, user.UserName, user.FullName, user.Email, user.PasswordHash)
+	query := "INSERT INTO users (id, username, fullname, email, passwordhash, isdisabled, token) VALUES (nextval('users_seq'),$1, $2, $3, $4, false, $5) RETURNING id;"
+	row := pq.Db.QueryRow(query, user.UserName, user.FullName, user.Email, user.PasswordHash, user.Token)
 
 	row.Scan(&user.ID)
 	return nil
@@ -136,4 +146,10 @@ func hashPassword(password string) (passwordHashed string, err error) {
 	}
 	passwordHashed = string(passBytes)
 	return passwordHashed, nil
+}
+
+func tokenGenerator() string {
+	b := make([]byte, 64)
+	rand.Read(b)
+	return fmt.Sprintf("%x", b)
 }
