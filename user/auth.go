@@ -33,7 +33,7 @@ type Session struct {
 	LastSeenTime time.Time `db:"lastseentime"`
 }
 
-// CreateUserHandler manejará el endpoint para crear un usuario
+// CreateUserHandler handles the user creation
 func CreateUserHandler(c *gin.Context) {
 	var user User
 	user.UserName = c.PostForm("username")
@@ -65,7 +65,7 @@ func CreateUserHandler(c *gin.Context) {
 	}
 }
 
-// LoginHandler maneja el login de usuarios
+// LoginHandler handle the users login
 func LoginHandler(c *gin.Context) {
 	var user User
 	user.UserName = c.PostForm("username")
@@ -103,7 +103,6 @@ func LoginHandler(c *gin.Context) {
 	return
 }
 
-// CreateUser efectivamente crea el usuario
 func createUser(user *User) (err error) {
 	user.PasswordHash, err = hashPassword(user.PasswordSalt)
 	if err != nil {

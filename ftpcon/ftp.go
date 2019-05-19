@@ -1,14 +1,17 @@
 package ftpcon
 
 import (
+	"bufio"
 	"fmt"
 	"log"
+	"mime/multipart"
+	"strings"
 	"time"
 
 	"github.com/jlaffaye/ftp"
 )
 
-// FTPManager estrablece el modelo singleton para una conexion FTP
+// FTPManager design the singleton model for an FTP connection
 type FTPManager struct {
 	Ftp           *ftp.ServerConn
 	IsInitialized bool
@@ -33,26 +36,33 @@ func new() FTPManager {
 	}
 
 	log.Print("FTP Connection established")
+	current, err := c.CurrentDir()
+	if err != nil {
+		log.Fatal(err)
+	}
+	log.Print(current)
 	return FTPManager{c, true}
 }
 
-// MoveLegislacionDirectory intenta moverse al path de Legislacion
+// MoveLegislacionDirectory try move dir to path /Legislacion
 func MoveLegislacionDirectory() (err error) {
 	c := ftpInstance.Ftp
 	err = c.ChangeDirToParent()
 	if err != nil {
-		log.Fatal("Error al cambiar al directorio raiz")
+		log.Print("Error al cambiar al directorio raiz")
 		return err
 	}
 	err = c.ChangeDir(path)
 	if err != nil {
-		log.Fatal("Error al cambiar al directorio Legislacion, tal vez no existe")
-		err = CreateLegislacionDirectory()
+		log.Print("Error al cambiar al directorio Legislacion, tal vez no existe")
+		err = createLegislacionDirectory()
 		if err != nil {
+			log.Print("Error al cambiar al crear directorio Legislacion")
 			return err
 		}
 		err = c.ChangeDir(path)
 		if err != nil {
+			log.Print("Error al cambiar al crear directorio Legislacion creado")
 			return err
 		}
 	}
@@ -60,8 +70,8 @@ func MoveLegislacionDirectory() (err error) {
 	return nil
 }
 
-// CreateLegislacionDirectory crea los directorios necesarios para guardar los archivos
-func CreateLegislacionDirectory() (err error) {
+// CreateLegislacionDirectory create the necessary directories to save the files
+func createLegislacionDirectory() (err error) {
 	c := ftpInstance.Ftp
 	err = c.ChangeDirToParent()
 	if err != nil {
@@ -72,4 +82,33 @@ func CreateLegislacionDirectory() (err error) {
 		return err
 	}
 	return nil
+}
+
+// SaveFile save a file on FTP Storage
+func SaveFile(file multipart.File, header *multipart.FileHeader) (err error) {
+	c := ftpInstance.Ftp
+	header.Filename = changeFileName(header.Filename)
+	bytes := make([]byte, header.Size)
+	buffer := bufio.NewReader(file)
+	_, err = buffer.Read(bytes)
+	if err != nil {
+		log.Printf(`Ocurrió un error al leer el archivo: %s`, err.Error())
+		return err
+	}
+	dir, err := c.CurrentDir()
+	log.Print(dir)
+	err = c.Stor(path, buffer)
+	if err != nil {
+		log.Printf(`Ocurrió un error al guardar el archivo: %s`, err.Error())
+		return err
+	}
+	return nil
+}
+
+func changeFileName(filename string) string {
+	filename = strings.Replace(filename, " ", "_", -1)
+	filename = strings.ToLower(filename)
+	t := time.Now()
+	filename = filename + t.Format("20060102150405")
+	return filename
 }
