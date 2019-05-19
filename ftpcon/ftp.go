@@ -13,40 +13,50 @@ import (
 
 // FTPManager design the singleton model for an FTP connection
 type FTPManager struct {
-	Ftp           *ftp.ServerConn
-	IsInitialized bool
+	FtpPublic  *ftp.ServerConn
+	ftpPrivate *ftp.ServerConn
 }
 
 var ftpInstance = new()
 
-// GetFTP return FTP instance
-func GetFTP() FTPManager {
-	return ftpInstance
+// GetInstanceFTP return FTP instance
+func GetInstanceFTP(isPublic bool) *ftp.ServerConn {
+	c := ftpInstance.ftpPrivate
+	if isPublic == true {
+		c = ftpInstance.FtpPublic
+	}
+	return c
 }
 
 func new() FTPManager {
-	c, err := ftp.Dial(fmt.Sprintf(`%s:%d`, host, port), ftp.DialWithTimeout(5*time.Second))
+	//init host private
+	cpriv, err := ftp.Dial(fmt.Sprintf(`%s:%d`, hostprivate, port), ftp.DialWithTimeout(5*time.Second))
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	err = c.Login(user, password)
+	err = cpriv.Login(user, password)
+	if err != nil {
+		log.Fatal(err)
+	}
+	log.Print("FTP Private Connection established")
+
+	cpub, err := ftp.Dial(fmt.Sprintf(`%s:%d`, hostpublic, port), ftp.DialWithTimeout(5*time.Second))
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	log.Print("FTP Connection established")
-	current, err := c.CurrentDir()
+	err = cpub.Login(user, password)
 	if err != nil {
 		log.Fatal(err)
 	}
-	log.Print(current)
-	return FTPManager{c, true}
+	log.Print("FTP Public Connection established")
+	return FTPManager{cpub, cpriv}
 }
 
 // MoveLegislacionDirectory try move dir to path /Legislacion
-func MoveLegislacionDirectory() (err error) {
-	c := ftpInstance.Ftp
+func MoveLegislacionDirectory(isPublic bool) (err error) {
+	c := GetInstanceFTP(isPublic)
 	err = c.ChangeDirToParent()
 	if err != nil {
 		log.Print("Error al cambiar al directorio raiz")
@@ -55,7 +65,7 @@ func MoveLegislacionDirectory() (err error) {
 	err = c.ChangeDir(path)
 	if err != nil {
 		log.Print("Error al cambiar al directorio Legislacion, tal vez no existe")
-		err = createLegislacionDirectory()
+		err = createLegislacionDirectory(isPublic)
 		if err != nil {
 			log.Print("Error al cambiar al crear directorio Legislacion")
 			return err
@@ -71,8 +81,8 @@ func MoveLegislacionDirectory() (err error) {
 }
 
 // CreateLegislacionDirectory create the necessary directories to save the files
-func createLegislacionDirectory() (err error) {
-	c := ftpInstance.Ftp
+func createLegislacionDirectory(isPublic bool) (err error) {
+	c := GetInstanceFTP(isPublic)
 	err = c.ChangeDirToParent()
 	if err != nil {
 		return err
@@ -84,10 +94,19 @@ func createLegislacionDirectory() (err error) {
 	return nil
 }
 
+func GetListFiles(isPublic bool) {
+	return
+}
+
 // SaveFile save a file on FTP Storage
-func SaveFile(file multipart.File, header *multipart.FileHeader) (err error) {
-	c := ftpInstance.Ftp
+func SaveFile(header *multipart.FileHeader) (err error) {
+	c := ftpInstance.ftpPrivate
 	header.Filename = changeFileName(header.Filename)
+	file, err := header.Open()
+	if err != nil {
+		log.Printf(`Ocurrió un error al abrir el archivo: %s`, err.Error())
+		return err
+	}
 	bytes := make([]byte, header.Size)
 	buffer := bufio.NewReader(file)
 	_, err = buffer.Read(bytes)
@@ -95,8 +114,6 @@ func SaveFile(file multipart.File, header *multipart.FileHeader) (err error) {
 		log.Printf(`Ocurrió un error al leer el archivo: %s`, err.Error())
 		return err
 	}
-	dir, err := c.CurrentDir()
-	log.Print(dir)
 	err = c.Stor(path, buffer)
 	if err != nil {
 		log.Printf(`Ocurrió un error al guardar el archivo: %s`, err.Error())
