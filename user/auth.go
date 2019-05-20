@@ -4,16 +4,13 @@ import (
 	"crypto/rand"
 	"fmt"
 	"legislacion/db"
+	"legislacion/utils"
 	"log"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
 	"golang.org/x/crypto/bcrypt"
 )
-
-type Errors struct {
-	Errors []string `json:"errors"`
-}
 
 // User export interface
 type User struct {
@@ -46,7 +43,7 @@ func CreateUserHandler(c *gin.Context) {
 		errors = append(errors, "Email required")
 	}
 	if len(errors) > 0 {
-		jsonErrors := Errors{Errors: errors}
+		jsonErrors := utils.Errors{Errors: errors}
 		c.JSON(http.StatusBadRequest, jsonErrors)
 		return
 	}
@@ -73,7 +70,7 @@ func LoginHandler(c *gin.Context) {
 		errors = append(errors, "Password required")
 	}
 	if len(errors) > 0 {
-		jsonErrors := Errors{Errors: errors}
+		jsonErrors := utils.Errors{Errors: errors}
 		c.JSON(http.StatusBadRequest, jsonErrors)
 		return
 	}
@@ -152,4 +149,15 @@ func tokenGenerator() string {
 	b := make([]byte, 64)
 	rand.Read(b)
 	return fmt.Sprintf("%x", b)
+}
+
+func ValidateToken(token string) bool {
+	pq := db.GetDB()
+	query := "SELECT token FROM users WHERE token = $1"
+	rows, err := pq.Db.Query(query, token)
+	if err != nil {
+		log.Print("ValidateToken", err)
+		return false
+	}
+	return rows.Next()
 }

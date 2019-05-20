@@ -1,7 +1,7 @@
 package main
 
 import (
-	_ "legislacion/db"
+	"legislacion/files"
 	"legislacion/user"
 	"log"
 	"net/http"
@@ -32,8 +32,8 @@ func handlerFunctions() {
 	r.GET("/home", homePage)
 	r.POST("/newUser", user.CreateUserHandler)
 	r.POST("/login", user.LoginHandler)
-	/* 	r.POST("/files/send", files.SendFileHandler)
-	 */
+	r.POST("/files/send", files.SendFileHandler)
+
 	err := r.Run(":3000")
 	if err != nil {
 		log.Panic(err)
