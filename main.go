@@ -33,6 +33,7 @@ func handlerFunctions() {
 	r.POST("/newUser", user.CreateUserHandler)
 	r.POST("/login", user.LoginHandler)
 	r.POST("/files/send", files.SendFileHandler)
+	r.GET("/files", files.ListFilesHandler)
 
 	err := r.Run(":3000")
 	if err != nil {
