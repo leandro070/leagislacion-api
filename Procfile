@@ -1,1 +1,1 @@
-web: bin/legislacion-api
+web: bin/legislacion
