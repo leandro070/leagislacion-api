@@ -6,5 +6,5 @@ const (
 	port     = 5432
 	user     = "admin"
 	password = "leandro98237"
-	dbname   = "legislacion"
+	dbname   = "legislacion-db"
 )
