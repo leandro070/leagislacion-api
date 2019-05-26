@@ -1,0 +1,11 @@
+{
+  "name": "Legislacion API: Go",
+  "description": "Esta es una API desarrollada como proyecto para la catedra Legislacion",
+  "keywords": [
+    "legislacion",
+    "go",
+    "api",
+    "example"
+  ],
+  "repository": "http://github.com/leandro070/legislacion-api"
+}
