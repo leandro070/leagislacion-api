@@ -3,6 +3,7 @@ package main
 import (
 	"legislacion/files"
 	"legislacion/user"
+	"legislacion/utils"
 	"log"
 	"net/http"
 
@@ -24,6 +25,25 @@ func homePage(c *gin.Context) {
 	}
 }
 
+func AuthRequired() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		token := c.GetHeader("token")
+		errors := utils.Errors{}
+		if len(token) == 0 {
+			errors.Errors = append(errors.Errors, "Token required")
+		}
+		userValid := user.ValidateToken(token)
+		if userValid == false {
+			errors.Errors = append(errors.Errors, "Token invalid")
+		}
+		if len(errors.Errors) > 0 {
+			c.JSON(http.StatusBadRequest, errors)
+			c.Abort()
+			return
+		}
+	}
+}
+
 func handlerFunctions() {
 	r := gin.New()
 	r.Use(gin.Logger())
@@ -32,8 +52,17 @@ func handlerFunctions() {
 	r.GET("/home", homePage)
 	r.POST("/newUser", user.CreateUserHandler)
 	r.POST("/login", user.LoginHandler)
-	r.POST("/files/send", files.SendFileHandler)
+	authorized := r.Group("/")
+
+	authorized.Use(AuthRequired())
+	{
+		authorized.POST("/files", files.SendFileHandler)
+		authorized.GET("/files/:id", files.FindFileByIDHandler)
+		authorized.PUT("/files/:id", files.UpdateFileHandler)
+		authorized.DELETE("/files/:id", files.DeleteFileHandler)
+	}
 	r.GET("/files", files.ListFilesHandler)
+	r.GET("/download/:id", files.DownloadFileHandler)
 
 	err := r.Run(":3000")
 	if err != nil {

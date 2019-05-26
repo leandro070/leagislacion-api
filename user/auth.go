@@ -20,7 +20,7 @@ type User struct {
 	Email        string `db:"email" json:"email"`
 	PasswordHash string `db:"passwordhash" json:"-"`
 	PasswordSalt string `db:"-" json:"-"`
-	IsDisabled   bool   `db:"isdisabled" json:"-"`
+	IsDisabled   bool   `db:"isdisabled" json:"is_disabled"`
 	Token        string `db:"token" json:"token"`
 }
 
@@ -58,20 +58,20 @@ func CreateUserHandler(c *gin.Context) {
 
 // LoginHandler handle the users login
 func LoginHandler(c *gin.Context) {
+	log.Print("LoginHandler")
 	var user User
 	user.UserName = c.PostForm("username")
 	user.PasswordSalt = c.PostForm("password")
 
-	errors := []string{}
+	errors := utils.Errors{}
 	if len(user.UserName) == 0 {
-		errors = append(errors, "Username required")
+		errors.Errors = append(errors.Errors, "Username required")
 	}
 	if len(user.PasswordSalt) == 0 {
-		errors = append(errors, "Password required")
+		errors.Errors = append(errors.Errors, "Password required")
 	}
-	if len(errors) > 0 {
-		jsonErrors := utils.Errors{Errors: errors}
-		c.JSON(http.StatusBadRequest, jsonErrors)
+	if len(errors.Errors) > 0 {
+		c.JSON(http.StatusBadRequest, errors)
 		return
 	}
 	pq := db.GetDB()
@@ -88,7 +88,8 @@ func LoginHandler(c *gin.Context) {
 	isValid := verifyPassword(user.PasswordSalt, user.PasswordHash)
 
 	if isValid == false {
-		c.JSON(http.StatusUnprocessableEntity, err)
+		errors.Errors = append(errors.Errors, "Username or password incorrect")
+		c.JSON(http.StatusUnprocessableEntity, errors)
 		return
 	}
 
@@ -105,7 +106,7 @@ func updateToken(user *User) {
 	pq := db.GetDB()
 	_, err := pq.Db.Exec(query, user.Token, user.ID)
 	if err != nil {
-		log.Print("Error al cambiar token", err)
+		log.Print("Error changing token", err)
 	}
 }
 
