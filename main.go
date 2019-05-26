@@ -6,6 +6,7 @@ import (
 	"legislacion/utils"
 	"log"
 	"net/http"
+	"os"
 
 	"github.com/gin-gonic/gin"
 )
@@ -45,6 +46,12 @@ func AuthRequired() gin.HandlerFunc {
 }
 
 func handlerFunctions() {
+	port := os.Getenv("PORT")
+
+	if port == "" {
+		log.Fatal("$PORT must be set")
+	}
+
 	r := gin.New()
 	r.Use(gin.Logger())
 	r.Use(gin.Recovery())
@@ -64,7 +71,7 @@ func handlerFunctions() {
 	r.GET("/files", files.ListFilesHandler)
 	r.GET("/download/:id", files.DownloadFileHandler)
 
-	err := r.Run(":3000")
+	err := r.Run(":" + port)
 	if err != nil {
 		log.Panic(err)
 	}
