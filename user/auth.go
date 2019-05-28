@@ -27,11 +27,8 @@ type User struct {
 // CreateUserHandler handles the user creation
 func CreateUserHandler(c *gin.Context) {
 	var user User
-	user.UserName = c.PostForm("username")
-	user.PasswordSalt = c.PostForm("password")
-	user.FullName = c.PostForm("fullname")
-	user.Email = c.PostForm("email")
-
+	c.BindJSON(&user)
+	log.Print(user)
 	errors := []string{}
 	if len(user.UserName) == 0 {
 		errors = append(errors, "Username required")
