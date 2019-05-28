@@ -19,7 +19,7 @@ type User struct {
 	FullName     string `db:"fullname, omitempty" json:"fullname,omitempty"`
 	Email        string `db:"email" json:"email"`
 	PasswordHash string `db:"passwordhash" json:"-"`
-	PasswordSalt string `db:"-" json:"-"`
+	PasswordSalt string `db:"-" json:"password,omitempty"`
 	IsDisabled   bool   `db:"isdisabled" json:"is_disabled"`
 	Token        string `db:"token" json:"token"`
 }
@@ -27,8 +27,11 @@ type User struct {
 // CreateUserHandler handles the user creation
 func CreateUserHandler(c *gin.Context) {
 	var user User
-	c.BindJSON(&user)
-	log.Print(user)
+	user.UserName = c.PostForm("username")
+	user.PasswordSalt = c.PostForm("password")
+	user.FullName = c.PostForm("fullname")
+	user.Email = c.PostForm("email")
+
 	errors := []string{}
 	if len(user.UserName) == 0 {
 		errors = append(errors, "Username required")
@@ -49,7 +52,7 @@ func CreateUserHandler(c *gin.Context) {
 	if err != nil {
 		c.JSON(http.StatusBadRequest, err)
 	}
-
+	user.PasswordSalt = ""
 	c.JSON(http.StatusOK, user)
 }
 
@@ -57,9 +60,10 @@ func CreateUserHandler(c *gin.Context) {
 func LoginHandler(c *gin.Context) {
 	log.Print("LoginHandler")
 	var user User
-	user.UserName = c.PostForm("username")
-	user.PasswordSalt = c.PostForm("password")
-
+	if err := c.ShouldBindJSON(&user); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
 	errors := utils.Errors{}
 	if len(user.UserName) == 0 {
 		errors.Errors = append(errors.Errors, "Username required")
