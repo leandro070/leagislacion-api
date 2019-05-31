@@ -44,7 +44,7 @@ func CORS() gin.HandlerFunc {
 
 func AuthRequired() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		token := c.GetHeader("token")
+		token := c.GetHeader("Authorization")
 		errors := utils.Errors{}
 		if len(token) == 0 {
 			errors.Errors = append(errors.Errors, "Token required")
@@ -54,7 +54,7 @@ func AuthRequired() gin.HandlerFunc {
 			errors.Errors = append(errors.Errors, "Token invalid")
 		}
 		if len(errors.Errors) > 0 {
-			c.JSON(http.StatusBadRequest, errors)
+			c.JSON(http.StatusUnauthorized, errors)
 			c.Abort()
 			return
 		}
@@ -81,10 +81,12 @@ func handlerFunctions() {
 	authorized.Use(AuthRequired())
 	{
 		authorized.POST("/files", files.SendFileHandler)
-		authorized.GET("/files/:id", files.FindFileByIDHandler)
 		authorized.PUT("/files/:id", files.UpdateFileHandler)
 		authorized.DELETE("/files/:id", files.DeleteFileHandler)
+		authorized.GET("/userByToken", user.UserByToken)
+
 	}
+	r.GET("/files/:id", files.FindFileByIDHandler)
 	r.GET("/files", files.ListFilesHandler)
 	r.GET("/download/:id", files.DownloadFileHandler)
 

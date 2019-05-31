@@ -7,6 +7,7 @@ import (
 	"legislacion/utils"
 	"log"
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"golang.org/x/crypto/bcrypt"
@@ -60,9 +61,9 @@ func CreateUserHandler(c *gin.Context) {
 func LoginHandler(c *gin.Context) {
 	log.Print("LoginHandler")
 	var user User
-	if err := c.ShouldBindJSON(&user); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
+	err := c.BindJSON(&user)
+	if err != nil {
+		log.Print(err)
 	}
 	errors := utils.Errors{}
 	if len(user.UserName) == 0 {
@@ -79,7 +80,7 @@ func LoginHandler(c *gin.Context) {
 	query := "SELECT * FROM users WHERE username = $1"
 	row := pq.Db.QueryRow(query, user.UserName)
 
-	err := row.Scan(&user.ID, &user.UserName, &user.FullName, &user.PasswordHash, &user.IsDisabled, &user.Email, &user.Token)
+	err = row.Scan(&user.ID, &user.UserName, &user.FullName, &user.PasswordHash, &user.IsDisabled, &user.Email, &user.Token)
 	if err != nil {
 		log.Print(err)
 		c.JSON(http.StatusInternalServerError, err)
@@ -94,9 +95,8 @@ func LoginHandler(c *gin.Context) {
 		return
 	}
 
-	if len(user.Token) == 0 {
-		updateToken(&user)
-	}
+	updateToken(&user)
+
 	c.JSON(http.StatusOK, user)
 	return
 }
@@ -153,7 +153,42 @@ func tokenGenerator() string {
 	return fmt.Sprintf("%x", b)
 }
 
+func UserByToken(c *gin.Context) {
+	var u User
+	token := c.GetHeader("Authorization")
+	if len(token) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Token required"})
+	}
+	token, err := extractToken(token)
+	if err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
+	}
+	pq := db.GetDB()
+	query := "SELECT token FROM users WHERE token = $1"
+	row := pq.Db.QueryRow(query, token)
+	row.Scan(&u.ID, &u.UserName, &u.FullName, &u.PasswordHash, &u.IsDisabled, &u.Email)
+	if err != nil {
+		log.Print("ValidateToken", err)
+	}
+	log.Print(u)
+	c.JSON(http.StatusOK, u)
+}
+
+func extractToken(bearer string) (string, error) {
+	splitToken := strings.Split(bearer, "Bearer")
+	if len(splitToken) != 2 {
+		return "", fmt.Errorf("Invalid format")
+	}
+	token := strings.TrimSpace(splitToken[1])
+	return token, nil
+}
+
 func ValidateToken(token string) bool {
+	splitToken := strings.Split(token, "Bearer")
+	if len(splitToken) != 2 {
+		return false
+	}
+	token = strings.TrimSpace(splitToken[1])
 	pq := db.GetDB()
 	query := "SELECT token FROM users WHERE token = $1"
 	rows, err := pq.Db.Query(query, token)
