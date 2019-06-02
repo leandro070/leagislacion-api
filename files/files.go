@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"legislacion/db"
-	"legislacion/utils"
 	"log"
 	"net/http"
 	"strconv"
@@ -27,18 +26,13 @@ type File struct {
 func SendFileHandler(c *gin.Context) {
 	log.Print("SendFileHandler")
 
-	errors := utils.Errors{}
 	label := c.PostForm("label")
 	if len(label) == 0 {
-		errors.Errors = append(errors.Errors, "Label required")
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "Nombre de archivo requerido"})
 	}
 	header, err := c.FormFile("file")
 	if err != nil {
-		errors.Errors = append(errors.Errors, err.Error())
-		return
-	}
-	if len(errors.Errors) > 0 {
-		c.JSON(http.StatusBadRequest, errors)
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "Archivo no adjunto. Por favor adjunte un archivo"})
 		return
 	}
 
@@ -46,8 +40,8 @@ func SendFileHandler(c *gin.Context) {
 
 	f, err := header.Open()
 	if err != nil {
-		errors.Errors = append(errors.Errors, `There was an error opening the file: %s`, err.Error())
-		c.JSON(http.StatusInternalServerError, errors)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ocurrio un error abriendo el archivo"})
+		log.Printf(`There was an error opening the file: %s`, err.Error())
 		return
 	}
 	defer f.Close()
@@ -61,8 +55,8 @@ func SendFileHandler(c *gin.Context) {
 	row := pq.Db.QueryRow(query, file.MimeType, file.Filename, file.Filedata, file.FileLabel)
 	err = row.Scan(&file.ID)
 	if err != nil {
-		errors.Errors = append(errors.Errors, `There was an error saving the file: %s`, err.Error())
-		c.JSON(http.StatusInternalServerError, errors)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ocurrió un error al guardar un archivo"})
+		log.Printf(`There was an error saving the file: %s`, err.Error())
 		return
 	}
 
@@ -72,15 +66,12 @@ func SendFileHandler(c *gin.Context) {
 
 // ListFilesHandler get files info
 func ListFilesHandler(c *gin.Context) {
-	log.Print("ListFilesHandler")
-	errors := utils.Errors{}
-
 	pq := db.GetDB()
 	query := "SELECT id, file_name, file_label FROM files"
 	rows, err := pq.Db.Query(query)
 	if err != nil {
-		errors.Errors = append(errors.Errors, `There was an error saving the file: %s`, err.Error())
-		c.JSON(http.StatusInternalServerError, errors)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ocurrio un error al guardar el archivo"})
+		log.Print("There was an error saving the file: %s", err.Error())
 		return
 	}
 	files := make([]File, 0)
@@ -92,8 +83,9 @@ func ListFilesHandler(c *gin.Context) {
 		files = append(files, file)
 	}
 	if err != nil {
-		errors.Errors = append(errors.Errors, "The files were not read correctly")
-		c.JSON(http.StatusInternalServerError, errors)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ocurrio un error, los archivos no se pudieron leer correctamente"})
+		log.Println("The files were not read correctly")
+		return
 	}
 	c.JSON(http.StatusOK, files)
 	return
@@ -101,8 +93,6 @@ func ListFilesHandler(c *gin.Context) {
 
 // FindFileByID search a file
 func FindFileByIDHandler(c *gin.Context) {
-	log.Print("FindFileByID")
-
 	id := c.Param("id")
 	pq := db.GetDB()
 
@@ -110,15 +100,17 @@ func FindFileByIDHandler(c *gin.Context) {
 	row := pq.Db.QueryRow(query, id)
 
 	file := File{0, "MimeType", "FileName", "FileLabel", make([]byte, 0)}
-	row.Scan(&file.ID, &file.MimeType, &file.Filename, &file.FileLabel)
-
+	err := row.Scan(&file.ID, &file.MimeType, &file.Filename, &file.FileLabel)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ocurrio un error en el servidor"})
+		log.Println(err.Error())
+		return
+	}
 	c.JSON(http.StatusOK, file)
 	return
 }
 
 func DownloadFileHandler(c *gin.Context) {
-	log.Print("DownloadFile")
-
 	id := c.Param("id")
 	pq := db.GetDB()
 
@@ -128,8 +120,12 @@ func DownloadFileHandler(c *gin.Context) {
 	filedata := make([]byte, 0)
 	filename := ""
 	contentType := ""
-	row.Scan(&filedata, &filename, &contentType)
-
+	err := row.Scan(&filedata, &filename, &contentType)
+	if err != nil {
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "Archivo no encontrado"})
+		log.Printf("File not found: %s", err.Error())
+		return
+	}
 	reader := bytes.NewReader(filedata)
 	contentLength := int64(len(filedata))
 	extraHeaders := map[string]string{
@@ -141,54 +137,50 @@ func DownloadFileHandler(c *gin.Context) {
 
 func UpdateFileHandler(c *gin.Context) {
 	log.Print("UpdateFileHandler")
-	errors := utils.Errors{}
 
 	idStr := c.Param("id")
 	if len(idStr) == 0 {
-		errors.Errors = append(errors.Errors, "ID not defined")
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "Archivo imposible de identificar. Envie el ID del archivo a modificar"})
+		return
 	}
 	id, err := strconv.Atoi(idStr)
 	if err != nil {
-		errors.Errors = append(errors.Errors, "ID not number")
-	}
-	if len(errors.Errors) > 0 {
-		c.JSON(http.StatusBadRequest, errors)
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "El ID enviado no tiene formato válido. Asegurese de que sea un número"})
 		return
 	}
 	pq := db.GetDB()
 
-	query := "SELECT id, file_label, file_name FROM files WHERE id=$1 LIMIT 1;"
 	var file File
+	query := "SELECT id, file_label, file_name FROM files WHERE id=$1 LIMIT 1;"
 	row := pq.Db.QueryRow(query, id)
 	err = row.Scan(&file.ID, &file.FileLabel, &file.Filename)
 	if err != nil {
-		log.Print(err)
-		errors.Errors = append(errors.Errors, "File not found")
-		c.JSON(http.StatusNotFound, errors)
+		c.JSON(http.StatusNotFound, gin.H{"error": "Archivo no encontrado"})
+		log.Printf("File not found: %s", err.Error())
 		return
 	}
 
 	label := c.PostForm("label")
 	if len(label) == 0 {
-		errors.Errors = append(errors.Errors, "Nothing to modify")
-		c.JSON(http.StatusNotModified, errors)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Nombre de archivo requerido"})
 		return
 	}
 	query = "UPDATE files SET file_label = $1 WHERE id = $2"
 	res, err := pq.Db.Exec(query, label, id)
 	if err != nil {
-		log.Print(err)
-		errors.Errors = append(errors.Errors, "The file could not be modified")
-		c.JSON(http.StatusInternalServerError, errors)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "El archivo no pudo ser modificado"})
+		log.Printf("The file could not be modified: %s", err.Error())
 		return
 	}
 	numDeleted, err := res.RowsAffected()
 	if err != nil {
-		log.Print(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ocurrio un error inesperado"})
+		log.Printf("Ocurrio un error inesperado: %s", err.Error())
+		return
 	}
+
 	if numDeleted == 0 {
-		errors.Errors = append(errors.Errors, "The file was not modified")
-		c.JSON(http.StatusNotModified, errors)
+		c.JSON(http.StatusNotModified, gin.H{"error": "Archivo no modificado"})
 		return
 	}
 	file.FileLabel = label
@@ -197,38 +189,35 @@ func UpdateFileHandler(c *gin.Context) {
 }
 
 func DeleteFileHandler(c *gin.Context) {
-	log.Print("UpdateFileHandler")
-	errors := utils.Errors{}
 
 	idStr := c.Param("id")
 	if len(idStr) == 0 {
-		errors.Errors = append(errors.Errors, "ID not defined")
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "Archivo imposible de identificar. Envie el ID del archivo a borrar"})
+		return
 	}
 	id, err := strconv.Atoi(idStr)
 	if err != nil {
-		errors.Errors = append(errors.Errors, "ID not number")
-	}
-	if len(errors.Errors) > 0 {
-		c.JSON(http.StatusBadRequest, errors)
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "El ID enviado no tiene formato válido. Asegurese de que sea un número"})
 		return
 	}
+
 	pq := db.GetDB()
 	query := "DELETE FROM files WHERE id=$1;"
 	res, err := pq.Db.Exec(query, id)
 	if err != nil {
-		log.Print(err)
-		errors.Errors = append(errors.Errors, "File not found")
-		c.JSON(http.StatusNotFound, errors)
+		c.JSON(http.StatusNotFound, gin.H{"error": "Archivo no encontrado"})
+		log.Printf("File not found: %s", err.Error())
 		return
 	}
 
 	numberRowsDeleted, err := res.RowsAffected()
 	if err != nil {
-		log.Print(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Archivo no eliminado"})
+		log.Printf("Error: %s", err.Error())
+		return
 	}
 	if numberRowsDeleted == 0 {
-		errors.Errors = append(errors.Errors, "File not found")
-		c.JSON(http.StatusNotFound, errors)
+		c.JSON(http.StatusNotModified, gin.H{"error": "Archivo no eliminado"})
 		return
 	}
 

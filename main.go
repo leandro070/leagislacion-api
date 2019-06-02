@@ -3,7 +3,6 @@ package main
 import (
 	"legislacion/files"
 	"legislacion/user"
-	"legislacion/utils"
 	"log"
 	"net/http"
 	"os"
@@ -45,16 +44,14 @@ func CORS() gin.HandlerFunc {
 func AuthRequired() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		token := c.GetHeader("Authorization")
-		errors := utils.Errors{}
 		if len(token) == 0 {
-			errors.Errors = append(errors.Errors, "Token required")
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Token requerido"})
+			c.Abort()
+			return
 		}
 		userValid := user.ValidateToken(token)
 		if userValid == false {
-			errors.Errors = append(errors.Errors, "Token invalid")
-		}
-		if len(errors.Errors) > 0 {
-			c.JSON(http.StatusUnauthorized, errors)
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Usuario invalido"})
 			c.Abort()
 			return
 		}
@@ -63,7 +60,6 @@ func AuthRequired() gin.HandlerFunc {
 
 func handlerFunctions() {
 	port := os.Getenv("PORT")
-
 	if port == "" {
 		log.Fatal("$PORT must be set")
 	}

@@ -4,7 +4,6 @@ import (
 	"crypto/rand"
 	"fmt"
 	"legislacion/db"
-	"legislacion/utils"
 	"log"
 	"net/http"
 	"strings"
@@ -20,7 +19,7 @@ type User struct {
 	FullName     string `db:"fullname, omitempty" json:"fullname,omitempty"`
 	Email        string `db:"email" json:"email"`
 	PasswordHash string `db:"passwordhash" json:"-"`
-	PasswordSalt string `db:"-" json:"password,omitempty"`
+	PasswordSalt string `db:"-" json:"-"`
 	IsDisabled   bool   `db:"isdisabled" json:"is_disabled"`
 	Token        string `db:"token" json:"token"`
 }
@@ -33,19 +32,16 @@ func CreateUserHandler(c *gin.Context) {
 	user.FullName = c.PostForm("fullname")
 	user.Email = c.PostForm("email")
 
-	errors := []string{}
 	if len(user.UserName) == 0 {
-		errors = append(errors, "Username required")
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Usuario requerido"})
+		return
 	}
 	if len(user.PasswordSalt) == 0 {
-		errors = append(errors, "Password required")
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Contraseña requerida"})
+		return
 	}
 	if len(user.Email) == 0 {
-		errors = append(errors, "Email required")
-	}
-	if len(errors) > 0 {
-		jsonErrors := utils.Errors{Errors: errors}
-		c.JSON(http.StatusBadRequest, jsonErrors)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Email requerido"})
 		return
 	}
 
@@ -65,56 +61,56 @@ func LoginHandler(c *gin.Context) {
 	if err != nil {
 		log.Print(err)
 	}
-	errors := utils.Errors{}
 	if len(user.UserName) == 0 {
-		errors.Errors = append(errors.Errors, "Username required")
-	}
-	if len(user.PasswordSalt) == 0 {
-		errors.Errors = append(errors.Errors, "Password required")
-	}
-	if len(errors.Errors) > 0 {
-		c.JSON(http.StatusBadRequest, errors)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Usuario requerido"})
 		return
 	}
+	if len(user.PasswordSalt) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Contraseña requerida"})
+		return
+	}
+
 	pq := db.GetDB()
 	query := "SELECT * FROM users WHERE username = $1"
 	row := pq.Db.QueryRow(query, user.UserName)
 
 	err = row.Scan(&user.ID, &user.UserName, &user.FullName, &user.PasswordHash, &user.IsDisabled, &user.Email, &user.Token)
 	if err != nil {
-		log.Print(err)
-		c.JSON(http.StatusInternalServerError, err)
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "Usuario o contraseña incorrecto"})
 		return
 	}
 
 	isValid := verifyPassword(user.PasswordSalt, user.PasswordHash)
 
 	if isValid == false {
-		errors.Errors = append(errors.Errors, "Username or password incorrect")
-		c.JSON(http.StatusUnprocessableEntity, errors)
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "Usuario o contraseña incorrecto"})
 		return
 	}
 
-	updateToken(&user)
-
+	err = updateToken(&user)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
 	c.JSON(http.StatusOK, user)
 	return
 }
 
-func updateToken(user *User) {
+func updateToken(user *User) error {
 	user.Token = tokenGenerator()
 	query := `UPDATE users SET token = $1 WHERE id = $2;`
 	pq := db.GetDB()
 	_, err := pq.Db.Exec(query, user.Token, user.ID)
 	if err != nil {
-		log.Print("Error changing token", err)
+		return fmt.Errorf("El token no se pudo actualizar")
 	}
+	return nil
 }
 
 func createUser(user *User) (err error) {
 	user.PasswordHash, err = hashPassword(user.PasswordSalt)
 	if err != nil {
-		log.Fatal("ERROR HASHING:", err)
+		log.Print("ERROR HASHING:", err)
 		return err
 	}
 	user.Token = tokenGenerator()
@@ -156,44 +152,42 @@ func tokenGenerator() string {
 func UserByToken(c *gin.Context) {
 	var u User
 	token := c.GetHeader("Authorization")
-	if len(token) == 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Token required"})
-	}
+
 	token, err := extractToken(token)
 	if err != nil {
-		c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 	}
 	pq := db.GetDB()
-	query := "SELECT token FROM users WHERE token = $1"
+	query := "SELECT * FROM users WHERE token = $1"
 	row := pq.Db.QueryRow(query, token)
-	row.Scan(&u.ID, &u.UserName, &u.FullName, &u.PasswordHash, &u.IsDisabled, &u.Email)
+
+	err = row.Scan(&u.ID, &u.UserName, &u.FullName, &u.PasswordHash, &u.IsDisabled, &u.Email, &u.Token)
 	if err != nil {
-		log.Print("ValidateToken", err)
+		c.JSON(http.StatusNotFound, gin.H{"error": "Token invalido"})
+		return
 	}
 	log.Print(u)
 	c.JSON(http.StatusOK, u)
 }
 
 func extractToken(bearer string) (string, error) {
-	splitToken := strings.Split(bearer, "Bearer")
+	splitToken := strings.Split(bearer, "Beaver")
 	if len(splitToken) != 2 {
-		return "", fmt.Errorf("Invalid format")
+		return "", fmt.Errorf("Formato de token invalido")
 	}
 	token := strings.TrimSpace(splitToken[1])
 	return token, nil
 }
 
 func ValidateToken(token string) bool {
-	splitToken := strings.Split(token, "Bearer")
-	if len(splitToken) != 2 {
+	token, err := extractToken(token)
+	if err != nil {
 		return false
 	}
-	token = strings.TrimSpace(splitToken[1])
 	pq := db.GetDB()
 	query := "SELECT token FROM users WHERE token = $1"
 	rows, err := pq.Db.Query(query, token)
 	if err != nil {
-		log.Print("ValidateToken", err)
 		return false
 	}
 	return rows.Next()
