@@ -66,6 +66,7 @@ func SendFileHandler(c *gin.Context) {
 
 // ListFilesHandler get files info
 func ListFilesHandler(c *gin.Context) {
+
 	pq := db.GetDB()
 	query := "SELECT id, file_name, file_label FROM files ORDER BY created_at DESC;"
 	rows, err := pq.Db.Query(query)

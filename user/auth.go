@@ -78,10 +78,10 @@ func LoginHandler(c *gin.Context) {
 	var user User
 
 	pq := db.GetDB()
-	query := "SELECT * FROM users WHERE username = $1"
+	query := "SELECT id, username, fullname, passwordhash, isdisabled, email, token FROM users WHERE username = $1"
 	row := pq.Db.QueryRow(query, userLogin.Username)
 
-	err = row.Scan(&user.ID, &user.UserName, &user.FullName, &user.PasswordHash, &user.IsDisabled, &user.Email, &user.Token, &user.CreatedAt, &user.UpdatedAt)
+	err = row.Scan(&user.ID, &user.UserName, &user.FullName, &user.PasswordHash, &user.IsDisabled, &user.Email, &user.Token)
 	if err != nil {
 		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "Usuario o contraseña incorrecto"})
 		return
@@ -125,8 +125,8 @@ func createUser(user *User) (err error) {
 	query := "INSERT INTO users (id, username, fullname, email, passwordhash, isdisabled, token) VALUES (nextval('users_seq'),$1, $2, $3, $4, false, $5) RETURNING id;"
 	row := pq.Db.QueryRow(query, user.UserName, user.FullName, user.Email, user.PasswordHash, user.Token)
 
-	row.Scan(&user.ID)
-	return nil
+	err = row.Scan(&user.ID)
+	return err
 }
 
 func verifyPassword(password, originalHashed string) (isEqual bool) {
@@ -165,7 +165,7 @@ func UserByToken(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 	}
 	pq := db.GetDB()
-	query := "SELECT * FROM users WHERE token = $1"
+	query := "SELECT id, username, fullname, passwordhash, isdisabled, email, token FROM users WHERE token = $1"
 	row := pq.Db.QueryRow(query, token)
 
 	err = row.Scan(&u.ID, &u.UserName, &u.FullName, &u.PasswordHash, &u.IsDisabled, &u.Email, &u.Token)
