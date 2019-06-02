@@ -22,6 +22,8 @@ type User struct {
 	PasswordSalt string `db:"-" json:"-"`
 	IsDisabled   bool   `db:"isdisabled" json:"is_disabled"`
 	Token        string `db:"token" json:"token"`
+	CreatedAt    string `db:"created_at" json:"-"`
+	UpdatedAt    string `db:"updated_at" json:"-"`
 }
 
 // CreateUserHandler handles the user creation
@@ -79,7 +81,7 @@ func LoginHandler(c *gin.Context) {
 	query := "SELECT * FROM users WHERE username = $1"
 	row := pq.Db.QueryRow(query, userLogin.Username)
 
-	err = row.Scan(&user.ID, &user.UserName, &user.FullName, &user.PasswordHash, &user.IsDisabled, &user.Email, &user.Token)
+	err = row.Scan(&user.ID, &user.UserName, &user.FullName, &user.PasswordHash, &user.IsDisabled, &user.Email, &user.Token, &user.CreatedAt, &user.UpdatedAt)
 	if err != nil {
 		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "Usuario o contraseña incorrecto"})
 		return
