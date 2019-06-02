@@ -57,10 +57,9 @@ func CreateUserHandler(c *gin.Context) {
 func LoginHandler(c *gin.Context) {
 	log.Print("LoginHandler")
 	var user User
-	err := c.BindJSON(&user)
-	if err != nil {
-		log.Print(err)
-	}
+	user.UserName = c.PostForm("username")
+	user.PasswordSalt = c.PostForm("password")
+
 	if len(user.UserName) == 0 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Usuario requerido"})
 		return
@@ -74,7 +73,7 @@ func LoginHandler(c *gin.Context) {
 	query := "SELECT * FROM users WHERE username = $1"
 	row := pq.Db.QueryRow(query, user.UserName)
 
-	err = row.Scan(&user.ID, &user.UserName, &user.FullName, &user.PasswordHash, &user.IsDisabled, &user.Email, &user.Token)
+	err := row.Scan(&user.ID, &user.UserName, &user.FullName, &user.PasswordHash, &user.IsDisabled, &user.Email, &user.Token)
 	if err != nil {
 		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "Usuario o contraseña incorrecto"})
 		return
