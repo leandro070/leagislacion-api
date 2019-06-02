@@ -56,30 +56,36 @@ func CreateUserHandler(c *gin.Context) {
 // LoginHandler handle the users login
 func LoginHandler(c *gin.Context) {
 	log.Print("LoginHandler")
-	var user User
-	user.UserName = c.PostForm("username")
-	user.PasswordSalt = c.PostForm("password")
-
-	if len(user.UserName) == 0 {
+	var userLogin struct {
+		Username string `json:"username"`
+		Password string `json:"password"`
+	}
+	err := c.BindJSON(&userLogin)
+	if err != nil {
+		c.Error(err)
+	}
+	if len(userLogin.Username) == 0 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Usuario requerido"})
 		return
 	}
-	if len(user.PasswordSalt) == 0 {
+	if len(userLogin.Password) == 0 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Contraseña requerida"})
 		return
 	}
 
+	var user User
+
 	pq := db.GetDB()
 	query := "SELECT * FROM users WHERE username = $1"
-	row := pq.Db.QueryRow(query, user.UserName)
+	row := pq.Db.QueryRow(query, userLogin.Username)
 
-	err := row.Scan(&user.ID, &user.UserName, &user.FullName, &user.PasswordHash, &user.IsDisabled, &user.Email, &user.Token)
+	err = row.Scan(&user.ID, &user.UserName, &user.FullName, &user.PasswordHash, &user.IsDisabled, &user.Email, &user.Token)
 	if err != nil {
 		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "Usuario o contraseña incorrecto"})
 		return
 	}
 
-	isValid := verifyPassword(user.PasswordSalt, user.PasswordHash)
+	isValid := verifyPassword(userLogin.Password, user.PasswordHash)
 
 	if isValid == false {
 		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "Usuario o contraseña incorrecto"})
