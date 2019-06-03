@@ -160,14 +160,20 @@ func UpdateFileHandler(c *gin.Context) {
 		log.Printf("File not found: %s", err.Error())
 		return
 	}
-
-	label := c.PostForm("label")
-	if len(label) == 0 {
+	var structLabel struct {
+		FileLabel string `db:"file_label" json:"label"`
+	}
+	err = c.BindJSON(&structLabel)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	if len(structLabel.FileLabel) == 0 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Nombre de archivo requerido"})
 		return
 	}
 	query = "UPDATE files SET file_label = $1 WHERE id = $2"
-	res, err := pq.Db.Exec(query, label, id)
+	res, err := pq.Db.Exec(query, structLabel.FileLabel, id)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "El archivo no pudo ser modificado"})
 		log.Printf("The file could not be modified: %s", err.Error())
@@ -184,7 +190,7 @@ func UpdateFileHandler(c *gin.Context) {
 		c.JSON(http.StatusNotModified, gin.H{"error": "Archivo no modificado"})
 		return
 	}
-	file.FileLabel = label
+	file.FileLabel = structLabel.FileLabel
 	c.JSON(http.StatusOK, file)
 	return
 }
