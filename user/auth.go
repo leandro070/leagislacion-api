@@ -194,6 +194,7 @@ func ValidateToken(token string) bool {
 	pq := db.GetDB()
 	query := "SELECT token FROM users WHERE token = $1"
 	rows, err := pq.Db.Query(query, token)
+	defer rows.Close()
 	if err != nil {
 		return false
 	}

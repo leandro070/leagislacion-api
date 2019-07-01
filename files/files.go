@@ -70,6 +70,7 @@ func ListFilesHandler(c *gin.Context) {
 	pq := db.GetDB()
 	query := "SELECT id, file_name, file_label FROM files ORDER BY created_at DESC;"
 	rows, err := pq.Db.Query(query)
+	defer rows.Close()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ocurrio un error al buscar los archivos"})
 		log.Print("There was an error saving the file: %s", err.Error())
